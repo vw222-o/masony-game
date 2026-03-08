@@ -17,6 +17,7 @@ compatibility/default_parent_skeleton_in_mesh_instance_3d=true
 config/name="masony-game"
 run/main_scene="uid://baa40jsiamxyb"
 config/features=PackedStringArray("4.6", "C#", "Forward Plus")
+boot_splash/show_image=false
 config/icon="res://icon.svg"
 
 [dotnet]
@@ -54,4 +55,3 @@ jump={
 [rendering]
 
 anti_aliasing/quality/screen_space_aa=2
-anti_aliasing/quality/use_taa=true

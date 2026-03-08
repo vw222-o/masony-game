@@ -1,91 +1,19 @@
-using System;
+using System.Collections.Generic;
 using Godot;
 
 [GlobalClass]
 public partial class CloudManager : Node3D
 {
-    public partial class Cloud : MultiMeshInstance3D
+    public class CloudInstance
     {
-        private int _lifeTime;
-        private Vector3 _step;
-        private RandomNumberGenerator _rng;
-        private bool _isDespawning = false;
-        private float _targetScale;
-        private const int FadeFrames = 60; // 60fps (tick) -> 1s
-
-        public Cloud(int lifeTime, Vector3 step, Vector3 spawnPosition, float cloudScale, RandomNumberGenerator rng,
-            Material material)
-        {
-            _lifeTime = lifeTime;
-            this._step = step * cloudScale;
-            Position = spawnPosition;
-            _targetScale = cloudScale;
-            _rng = rng;
-            GenerateMesh(material, 40);
-        }
-
-        public override void _Ready()
-        {
-            Scale = Vector3.Zero;
-            var tween = CreateTween();
-            tween.TweenProperty(this, "scale", new Vector3(_targetScale, _targetScale, _targetScale), 1.0)
-                .SetTrans(Tween.TransitionType.Cubic)
-                .SetEase(Tween.EaseType.Out);
-        }
-
-        private void GenerateMesh(Material material, int instanceCount)
-        {
-            Multimesh = new MultiMesh();
-            Multimesh.SetMesh(new SphereMesh() { Material = material });
-            Multimesh.SetTransformFormat(MultiMesh.TransformFormatEnum.Transform3D);
-            Multimesh.SetInstanceCount(instanceCount);
-            Multimesh.SetVisibleInstanceCount(instanceCount);
-            for (int i = 0; i < Multimesh.VisibleInstanceCount; i++)
-            {
-                var offset = GetCloudOffset(i, 1.0f);
-                var transform = new Transform3D(Basis.Identity, offset);
-                Multimesh.SetInstanceTransform(i, transform);
-            }
-        }
-
-        private Vector3 GetCloudOffset(int index, float scale)
-        {
-            Vector3 p;
-            do
-            {
-                p = new Vector3(
-                    _rng.Randf() * 2f - 1f,
-                    _rng.Randf() * 2f - 1f,
-                    _rng.Randf() * 2f - 1f
-                );
-            } while (p.LengthSquared() > 1f);
-
-            p.X *= scale * 1.8f; // wider
-            p.Y *= scale * 0.6f; // flatter
-            p.Z *= scale * 1.2f; // slightly deep
-
-            return p;
-        }
-
-        public Cloud()
-        {
-        }
-
-        public override void _PhysicsProcess(double delta)
-        {
-            Position += _step;
-            _lifeTime--;
-
-            if (_lifeTime <= FadeFrames && !_isDespawning)
-            {
-                _isDespawning = true;
-                var tween = CreateTween();
-                tween.TweenProperty(this, "scale", Vector3.Zero, 1.0)
-                    .SetTrans(Tween.TransitionType.Cubic)
-                    .SetEase(Tween.EaseType.In);
-                tween.Finished += QueueFree;
-            }
-        }
+        public Vector3 Position;
+        public Vector3 Velocity;
+        public float TargetScale;
+        public float CurrentScale;
+        public float Age;
+        public float Lifetime;
+        public Vector3[] SphereOffsets;
+        public int StartIndex;
     }
 
     public partial class CloudLayer : Resource
@@ -94,10 +22,14 @@ public partial class CloudManager : Node3D
         [Export] public float Coverage;
         [Export] public float WindSpeed;
         [Export] public float CloudScale;
-        public Vector3 WindDirection; 
 
+        public Vector3 WindDirection;
         public int TargetCount;
         public float SpawnProbability;
+
+        public MultiMeshInstance3D MMInstance;
+        public List<CloudInstance> Clouds = new();
+        public Queue<int> FreeIndices = new();
 
         public CloudLayer(float height, float coverage, float windSpeed, float cloudScale = 1f)
         {
@@ -113,40 +45,56 @@ public partial class CloudManager : Node3D
 
         public void CalculateStats(float radius, float secondsAlive)
         {
-            // estimate the area of 1 cloud cluster. 
-            // cloud offset logic
             float cloudArea = Mathf.Pi * (1.8f * CloudScale) * (1.2f * CloudScale);
             float skyArea = Mathf.Pi * radius * radius;
-
-            // #clouds -> cover the sky
             TargetCount = Mathf.RoundToInt((Coverage * skyArea) / cloudArea);
-            // maintain cover after dissipation
             SpawnProbability = (float)TargetCount / (secondsAlive * 60f);
         }
     }
 
-    [Export] public CloudLayer[] CloudLayers = [new(40f, 0.2f, 0.01f, 5f), new(60f, 0f, 0.004f, 8f)];
-    public Vector3 SpawnPosition;
-    private RandomNumberGenerator _rng = new();
+    [Export] public CloudLayer[] CloudLayers = [new(40f, 0.2f, 0.01f, 5f), new(60f, 0.15f, 0.004f, 8f)];
     [Export] public Material CloudMaterial;
+
+    private RandomNumberGenerator _rng = new();
     private const float Radius = 450f;
     private const int SecondsAlive = 25;
+    private const int SpheresPerCloud = 20;
 
     public override void _Ready()
     {
         _rng.Randomize();
-        SpawnPosition = Position;
-        foreach (var cloudLayer in CloudLayers)
+        foreach (var layer in CloudLayers)
         {
-            cloudLayer.WindDirection = new Vector3(_rng.Randf() * 2f - 1f, 0f, _rng.Randf() * 2f - 1f).Normalized();
-            cloudLayer.CalculateStats(Radius, SecondsAlive);
+            layer.WindDirection = new Vector3(_rng.Randf() * 2f - 1f, 0f, _rng.Randf() * 2f - 1f).Normalized();
+            layer.CalculateStats(Radius, SecondsAlive);
 
-            // Fill the sky initially
-            for (int i = 0; i < cloudLayer.TargetCount; i++)
+            var mm = new MultiMesh
+            {
+                Mesh = new SphereMesh
+                {
+                    Material = CloudMaterial,
+                    RadialSegments = 8, // shadows
+                    Rings = 6 // believe it or not, also shadows
+                },
+                TransformFormat = MultiMesh.TransformFormatEnum.Transform3D,
+                InstanceCount = (layer.TargetCount + 20) * SpheresPerCloud
+            };
+
+            layer.MMInstance = new MultiMeshInstance3D { Multimesh = mm };
+            AddChild(layer.MMInstance);
+
+            for (int i = 0; i < mm.InstanceCount; i += SpheresPerCloud)
+            {
+                layer.FreeIndices.Enqueue(i);
+                for (int j = 0; j < SpheresPerCloud; j++)
+                    mm.SetInstanceTransform(i + j, new Transform3D(Basis.Identity.Scaled(Vector3.Zero), Vector3.Zero));
+            }
+
+            for (int i = 0; i < layer.TargetCount; i++)
             {
                 var pos = GetRandomPointInRadius(Radius);
-                pos.Y = cloudLayer.Height;
-                SpawnCloudAt(cloudLayer, pos);
+                pos.Y = layer.Height;
+                SpawnCloudAt(layer, pos, _rng.Randf() * SecondsAlive);
             }
         }
     }
@@ -158,30 +106,87 @@ public partial class CloudManager : Node3D
         return new Vector3(r * Mathf.Cos(theta), 0, r * Mathf.Sin(theta));
     }
 
-    public void SpawnCloud(CloudLayer cloudLayer)
+    private void SpawnCloudAt(CloudLayer layer, Vector3 position, float initialAge = 0)
     {
-        var pos = GetRandomPointInRadius(Radius);
-        pos.Y = cloudLayer.Height;
-        SpawnCloudAt(cloudLayer, pos);
-    }
+        if (layer.FreeIndices.Count == 0) return;
 
-    private void SpawnCloudAt(CloudLayer cloudLayer, Vector3 position)
-    {
-        AddChild(new Cloud(SecondsAlive * 60, cloudLayer.WindSpeed * cloudLayer.WindDirection, position,
-            cloudLayer.CloudScale,
-            _rng, CloudMaterial));
+        int startIndex = layer.FreeIndices.Dequeue();
+        var cloud = new CloudInstance
+        {
+            Position = position,
+            Velocity = layer.WindDirection * layer.WindSpeed * layer.CloudScale,
+            TargetScale = layer.CloudScale,
+            CurrentScale = 0,
+            Age = initialAge,
+            Lifetime = SecondsAlive,
+            StartIndex = startIndex,
+            SphereOffsets = new Vector3[SpheresPerCloud]
+        };
+
+        for (int i = 0; i < SpheresPerCloud; i++)
+        {
+            Vector3 p;
+            do
+            {
+                p = new Vector3(_rng.Randf() * 2f - 1f, _rng.Randf() * 2f - 1f, _rng.Randf() * 2f - 1f);
+            } while (p.LengthSquared() > 1f);
+
+            p.X *= 1.8f;
+            p.Y *= 0.6f;
+            p.Z *= 1.2f;
+            cloud.SphereOffsets[i] = p;
+        }
+
+        layer.Clouds.Add(cloud);
     }
 
     public override void _PhysicsProcess(double delta)
     {
-        foreach (var cloudLayer in CloudLayers)
+        float fDelta = (float)delta;
+        foreach (var layer in CloudLayers)
         {
-            float p = cloudLayer.SpawnProbability;
-            // Handle probabilities > 1 by spawning multiple clouds if needed
-            while (p > 0)
+            var mm = layer.MMInstance.Multimesh;
+
+            for (int i = layer.Clouds.Count - 1; i >= 0; i--)
             {
-                if (_rng.Randf() < p) SpawnCloud(cloudLayer);
-                p -= 1.0f;
+                var cloud = layer.Clouds[i];
+                cloud.Age += fDelta;
+                cloud.Position += cloud.Velocity;
+
+                // Handle scaling
+                if (cloud.Age < 1.0f) cloud.CurrentScale = Mathf.Lerp(0, cloud.TargetScale, cloud.Age);
+                else if (cloud.Age > cloud.Lifetime - 1.0f)
+                    cloud.CurrentScale = Mathf.Lerp(cloud.TargetScale, 0, cloud.Age - (cloud.Lifetime - 1.0f));
+                else cloud.CurrentScale = cloud.TargetScale;
+
+                // Update transforms
+                for (int j = 0; j < SpheresPerCloud; j++)
+                {
+                    var basis = Basis.Identity.Scaled(new Vector3(cloud.CurrentScale, cloud.CurrentScale,
+                        cloud.CurrentScale));
+                    var transform =
+                        new Transform3D(basis, cloud.Position + cloud.SphereOffsets[j] * cloud.CurrentScale);
+                    mm.SetInstanceTransform(cloud.StartIndex + j, transform);
+                }
+
+                if (cloud.Age >= cloud.Lifetime)
+                {
+                    // Hide dead cloud
+                    for (int j = 0; j < SpheresPerCloud; j++)
+                        mm.SetInstanceTransform(cloud.StartIndex + j,
+                            new Transform3D(Basis.Identity.Scaled(Vector3.Zero), Vector3.Zero));
+
+                    layer.FreeIndices.Enqueue(cloud.StartIndex);
+                    layer.Clouds.RemoveAt(i);
+                }
+            }
+
+            // Continuous spawning
+            if (_rng.Randf() < layer.SpawnProbability)
+            {
+                var pos = GetRandomPointInRadius(Radius);
+                pos.Y = layer.Height;
+                SpawnCloudAt(layer, pos);
             }
         }
     }

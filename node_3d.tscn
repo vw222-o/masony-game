@@ -1,0 +1,66 @@
+[gd_scene format=3 uid="uid://baa40jsiamxyb"]
+
+[ext_resource type="PackedScene" uid="uid://b4yfjfhico440" path="res://GrassFloor10x10.tscn" id="2_a0tk4"]
+[ext_resource type="Script" uid="uid://chj0uvvhoh5vj" path="res://Player.cs" id="2_noarx"]
+[ext_resource type="Script" uid="uid://cwy7v5eqevmog" path="res://CloudManager.cs" id="3_a0tk4"]
+[ext_resource type="Shader" uid="uid://romb13swbpum" path="res://cloud.gdshader" id="4_r3fl7"]
+
+[sub_resource type="CapsuleMesh" id="CapsuleMesh_a0tk4"]
+
+[sub_resource type="CapsuleShape3D" id="CapsuleShape3D_r3fl7"]
+
+[sub_resource type="ProceduralSkyMaterial" id="ProceduralSkyMaterial_noarx"]
+sky_top_color = Color(0.21176471, 0.5372549, 0.84705883, 1)
+sky_horizon_color = Color(0.21176471, 0.5372549, 0.84705883, 1)
+ground_horizon_color = Color(0.21176471, 0.5372549, 0.84705883, 1)
+
+[sub_resource type="Sky" id="Sky_a0tk4"]
+sky_material = SubResource("ProceduralSkyMaterial_noarx")
+
+[sub_resource type="Environment" id="Environment_noarx"]
+background_mode = 2
+background_color = Color(0.14155462, 0.7029249, 0.99999994, 1)
+sky = SubResource("Sky_a0tk4")
+ssr_enabled = true
+ssao_enabled = true
+ssil_enabled = true
+adjustment_enabled = true
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_jka67"]
+render_priority = 0
+shader = ExtResource("4_r3fl7")
+
+[node name="Node3D" type="Node3D" unique_id=962506625]
+
+[node name="DirectionalLight3D" type="DirectionalLight3D" parent="." unique_id=1945384262]
+transform = Transform3D(-1.0000001, 8.742278e-08, 0, -5.2246055e-08, -0.59762514, 0.80177575, 7.0093456e-08, 0.80177563, 0.5976252, 0, 0, 0)
+light_angular_distance = 5.0
+shadow_enabled = true
+
+[node name="Player" type="CharacterBody3D" parent="." unique_id=88780181 node_paths=PackedStringArray("Camera", "CollisionShape", "Mesh")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.6648593, 0)
+script = ExtResource("2_noarx")
+Camera = NodePath("Camera3D")
+CollisionShape = NodePath("CollisionShape3D")
+Mesh = NodePath("MeshInstance3D")
+metadata/_custom_type_script = "uid://chj0uvvhoh5vj"
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="Player" unique_id=1991574338]
+mesh = SubResource("CapsuleMesh_a0tk4")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="Player" unique_id=1816458528]
+shape = SubResource("CapsuleShape3D_r3fl7")
+
+[node name="Camera3D" type="Camera3D" parent="Player" unique_id=869093912]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.5255275, 0)
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="." unique_id=400135676]
+environment = SubResource("Environment_noarx")
+
+[node name="GrassFloor10" parent="." unique_id=1938687863 instance=ExtResource("2_a0tk4")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 5, 0, 5)
+
+[node name="CloudManager" type="Node3D" parent="." unique_id=217327459]
+script = ExtResource("3_a0tk4")
+CloudMaterial = SubResource("ShaderMaterial_jka67")
+metadata/_custom_type_script = "uid://cwy7v5eqevmog"

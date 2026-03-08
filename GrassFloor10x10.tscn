@@ -1,0 +1,24 @@
+[gd_scene format=3 uid="uid://b4yfjfhico440"]
+
+[ext_resource type="ArrayMesh" uid="uid://blu7wt77vhox1" path="res://mesh.tres" id="1_q6naj"]
+[ext_resource type="Shader" uid="uid://t5inhm28nvo8" path="res://subdivided.gdshader" id="2_lm132"]
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_r3fl7"]
+render_priority = 0
+shader = ExtResource("2_lm132")
+shader_parameter/albedo = Color(0, 0.7319541, 7.70092e-07, 1)
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_noarx"]
+size = Vector3(2, 0.039892457, 2)
+
+[node name="GrassFloor10" type="StaticBody3D" unique_id=1938687863]
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="." unique_id=1155009505]
+transform = Transform3D(5, 0, 0, 0, 5, 0, 0, 0, 5, 0, 0.2, 0)
+mesh = ExtResource("1_q6naj")
+skeleton = NodePath("../..")
+surface_material_override/0 = SubResource("ShaderMaterial_r3fl7")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="." unique_id=1872014108]
+transform = Transform3D(5, 0, 0, 0, 5, 0, 0, 0, 5, 0, 0.20018935, 0)
+shape = SubResource("BoxShape3D_noarx")

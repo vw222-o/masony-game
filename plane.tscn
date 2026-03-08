@@ -1,0 +1,9 @@
+[gd_scene format=3 uid="uid://ep6n6w6lo8k4"]
+
+[ext_resource type="PackedScene" uid="uid://dppthg3cxerhk" path="res://Plane.glb" id="1_s46f0"]
+[ext_resource type="ArrayMesh" uid="uid://blu7wt77vhox1" path="res://mesh.tres" id="2_dpar4"]
+
+[node name="Plane2" unique_id=1119353774 instance=ExtResource("1_s46f0")]
+
+[node name="Plane" parent="." index="0" unique_id=1649108962]
+mesh = ExtResource("2_dpar4")
